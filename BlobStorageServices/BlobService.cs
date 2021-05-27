@@ -1,5 +1,8 @@
 ﻿using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Blobs.Specialized;
+using Azure.Storage.Sas;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -19,6 +22,7 @@ namespace BlobStorageServices
         BlobServiceClient blobServiceClient;
         BlobContainerClient containerClient;
         BlobClient blobClient;
+        private readonly ILogger<BlobService> logger;
 
         public BlobService(string connectionString,string containerName)
         {
@@ -35,49 +39,196 @@ namespace BlobStorageServices
 
         public async Task<Grocery> GetBlobData(string blobName)
         {
-            containerClient = getDetailsContainer();
-            blobClient = containerClient.GetBlobClient(blobName);
-            StringBuilder stringBuilder = new StringBuilder();
-
-            if (await blobClient.ExistsAsync()) 
+            try
             {
-                var blob = blobClient.DownloadAsync().Result;              
-                using (var streamReader = new StreamReader(blob.Value.Content))
-                {
-                    while(!streamReader.EndOfStream) 
-                    {
-                        string data = await streamReader.ReadToEndAsync();
-                        stringBuilder.Append(data);
-                    }
-                    
-                }
-            }
+                containerClient = getDetailsContainer();
+                blobClient = containerClient.GetBlobClient(blobName);
+                StringBuilder stringBuilder = new StringBuilder();
 
-            string jsonFormatted = PrettyJson(stringBuilder.ToString());
-            var returnData = JsonConvert.DeserializeObject<Grocery>(jsonFormatted);
-            return returnData;
+                if (await blobClient.ExistsAsync())
+                {
+                    var blob = blobClient.DownloadAsync().Result;
+
+                    using (var streamReader = new StreamReader(blob.Value.Content))
+                    {
+                        while (!streamReader.EndOfStream)
+                        {
+                            string data = await streamReader.ReadToEndAsync();
+                            stringBuilder.Append(data);
+                        }
+
+                    }
+                }
+
+                string jsonFormatted = PrettyJson(stringBuilder.ToString());
+                var returnData = JsonConvert.DeserializeObject<Grocery>(jsonFormatted);
+                return returnData;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
         }
 
         public async Task<string> Uploadblob(Grocery groceryData, string blobName)
         {
-            containerClient = getDetailsContainer();
-            blobClient = containerClient.GetBlobClient(blobName);
-            var serilizedData = JsonConvert.SerializeObject(groceryData, Formatting.Indented);
-           
-            using (var ms = new MemoryStream())
+            try
             {
-                LoadStreamWithJson(ms, serilizedData);
-                await blobClient.UploadAsync(ms,true);
-                return Constants.Uploaded;
+                containerClient = getDetailsContainer();
+                blobClient = containerClient.GetBlobClient(blobName);
+
+                //add properties
+                BlobProperties blobProperties = blobClient.GetProperties();
+                IDictionary<string, string> metaDeta = blobProperties.Metadata;
+                metaDeta.Add("Shop", "Grocery");
+                metaDeta.Add("ShopID", "GRST02");
+                blobClient.SetMetadata(metaDeta);
+
+                //Aquire lease
+                //BlobLeaseClient blobLeaseClient = blobClient.GetBlobLeaseClient();
+                //BlobLease blobLease = blobLeaseClient.Acquire(TimeSpan.FromSeconds(25));
+                //BlobUploadOptions options = new BlobUploadOptions()
+                //{
+                //    Conditions = new BlobRequestConditions()
+                //    {
+                //        LeaseId = blobLease.LeaseId
+                //    }                
+                //};
+
+                var serilizedData = JsonConvert.SerializeObject(groceryData, Formatting.Indented);
+
+                using (var ms = new MemoryStream())
+                {
+                    LoadStreamWithJson(ms, serilizedData);
+                    await blobClient.UploadAsync(ms, true);
+                    // await blobClient.UploadAsync(ms, options);  // blob upload option with lease
+                    //blobLeaseClient.Release();
+                    return Constants.Uploaded;
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
             }
         }
 
         public async Task<string> DeleteBlob(string blobName)
         {
+            try
+            {
+                containerClient = getDetailsContainer();
+                blobClient = containerClient.GetBlobClient(blobName);
+                await blobClient.DeleteIfExistsAsync();
+                return Constants.Deleted;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        public async Task<List<BlobDetails>> GetBlobs()
+        {
+            try
+            {
+                containerClient = getDetailsContainer();
+                List<BlobDetails> bloblist = new List<BlobDetails>();
+                BlobDetails blobDetails = new BlobDetails();
+                foreach (BlobItem item in containerClient.GetBlobs())
+                {
+                    blobDetails.BlobName = item.Name;
+                    bloblist.Add(blobDetails);
+                }
+                return bloblist;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public async Task<Grocery> GetBlobDataWithSAS(string blobName)
+        {
+            try
+            {
+                Uri blobUri = GetSAS(blobName);
+                blobClient = new BlobClient(blobUri);
+                StringBuilder stringBuilder = new StringBuilder();
+                if (await blobClient.ExistsAsync())
+                {
+                    var blob = blobClient.DownloadAsync().Result;
+                    using (var streamReader = new StreamReader(blob.Value.Content))
+                    {
+                        while (!streamReader.EndOfStream)
+                        {
+                            string data = await streamReader.ReadToEndAsync();
+                            stringBuilder.Append(data);
+                        }
+
+                    }
+                }
+
+                string jsonFormatted = PrettyJson(stringBuilder.ToString());
+                var returnData = JsonConvert.DeserializeObject<Grocery>(jsonFormatted);
+                return returnData;
+
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        public async Task<BlobPropertiesData> GetBlobProperties(string blobName)
+        {
+            try
+            {
+                var propertiesData = new BlobPropertiesData();
+                containerClient = getDetailsContainer();
+                blobClient = containerClient.GetBlobClient(blobName);
+
+                BlobProperties blobProperties = blobClient.GetProperties();
+
+                propertiesData.AccessTier = blobProperties.AccessTier;
+                propertiesData.BlobType = blobProperties.BlobType.ToString();
+                propertiesData.ContentLength = blobProperties.ContentLength;
+                propertiesData.LastModified = blobProperties.LastModified.ToString();
+                propertiesData.LeaseStatus = blobProperties.LeaseStatus.ToString();
+                propertiesData.ContentType = blobProperties.ContentType;
+
+                IDictionary<string, string> keyValuePairs = blobProperties.Metadata;
+                propertiesData.Shop = keyValuePairs["Shop"];
+                propertiesData.ShopID = keyValuePairs["ShopID"];
+
+                //foreach (KeyValuePair<string,string> item in keyValuePairs)
+                //{
+                //    logger.LogInformation("Items keys" + item.Key);
+                //    logger.LogInformation("Items Value" + item.Value);               
+                //}
+
+                return propertiesData;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+        private Uri GetSAS(string blobName)
+        {
             containerClient = getDetailsContainer();
             blobClient = containerClient.GetBlobClient(blobName);
-            await blobClient.DeleteIfExistsAsync();
-            return Constants.Deleted;
+            BlobSasBuilder sasBuilder = new BlobSasBuilder()
+            {
+                BlobContainerName = _containerName,
+                BlobName = blobName,
+                ContentType = "application/json",
+                Resource = "b"
+            };
+
+            sasBuilder.SetPermissions(BlobSasPermissions.Read | BlobSasPermissions.List);
+            sasBuilder.ExpiresOn = DateTimeOffset.UtcNow.AddHours(2);
+
+            return blobClient.GenerateSasUri(sasBuilder);
         }
 
         public string PrettyJson(string unPrettyJson)
@@ -107,6 +258,29 @@ namespace BlobStorageServices
             ms.Position = 0;
         }
 
-       
+        //take data in memory stream and change
+        //public async Task<string> addMoreData(string blobName)
+        //{
+        //    containerClient = getDetailsContainer();
+        //    blobClient = containerClient.GetBlobClient(blobName);
+
+        //    MemoryStream memory = new MemoryStream();
+        //    blobClient.DownloadTo(memory);
+
+        //    memory.Position = 0;
+        //    StreamReader streamReader = new StreamReader(memory);
+
+        //    var data = streamReader.ReadToEnd();
+
+        //    StreamWriter streamWriter = new StreamWriter(memory);
+        //    streamWriter.Write("");
+        //    streamWriter.Flush();
+        //    memory.Position = 0;
+
+        //    await blobClient.UploadAsync(memory, true);
+
+        //    return Constants.Uploaded;
+                     
+        //}
     }
 }

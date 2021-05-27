@@ -7,6 +7,7 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using System.Collections.Generic;
 
 namespace BlobStorageServices
 {
@@ -58,6 +59,54 @@ namespace BlobStorageServices
             log.LogInformation("C# HTTP trigger function processed a request.");
 
             var response = await _blobService.CreateContainer();
+
+            return response;
+        }
+
+        [FunctionName("GetBlobs")]
+        public async Task<List<BlobDetails>> GetBlobs(
+         [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+         ILogger log)
+        {
+            log.LogInformation("C# HTTP trigger function processed a request.");
+
+            var response = await _blobService.GetBlobs();
+
+            return response;
+        }
+
+        [FunctionName("ReadBlobsWithSAS")]
+        public async Task<Grocery> ReadBlobsWithSAS(
+        [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+        ILogger log)
+        {
+            log.LogInformation("C# HTTP trigger function processed a request.");
+
+            var response = await _blobService.GetBlobDataWithSAS("Grocery.Json");
+
+            return response;
+        }
+
+        [FunctionName("DeleteBlob")]
+        public async Task<string> DeleteBlob(
+        [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+        ILogger log)
+        {
+            log.LogInformation("C# HTTP trigger function processed a request.");
+
+            var response = await _blobService.DeleteBlob("Grocery.json");
+
+            return response;
+        }
+
+        [FunctionName("GetBlobProperties")]
+        public async Task<BlobPropertiesData> GetBlobProperties(
+       [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+       ILogger log)
+        {
+            log.LogInformation("C# HTTP trigger function processed a request.");
+
+            var response = await _blobService.GetBlobProperties("Grocery.Json");
 
             return response;
         }
