@@ -9,5 +9,6 @@ namespace BlobStorageServices
         public static readonly string Uploaded = "Uploaded";
         public static readonly string Deleted = "Deleted";
         public static readonly string Created = "Blob Container Created";
+        public static readonly string MetaDataCreated = "MetaData Created";
     }
 }

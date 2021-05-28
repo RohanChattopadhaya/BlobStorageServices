@@ -14,6 +14,7 @@ namespace BlobStorageServices
         Task<List<BlobDetails>> GetBlobs();
         Task<Grocery> GetBlobDataWithSAS(string blobName);
         Task<BlobPropertiesData> GetBlobProperties(string blobName);
+        Task<string> SetMetaData(string blobName, List<MetaData> metaData);
 
     }
 }

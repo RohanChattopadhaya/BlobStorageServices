@@ -110,5 +110,18 @@ namespace BlobStorageServices
 
             return response;
         }
+
+        [FunctionName("SetMetaData")]
+        public async Task<string> SetMetaData(
+      [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req,
+      ILogger log)
+        {
+            log.LogInformation("C# HTTP trigger function processed a request.");
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            var metaData = JsonConvert.DeserializeObject<List<MetaData>>(requestBody);
+            var response = await _blobService.SetMetaData("Grocery.Json", metaData);
+
+            return response;
+        }
     }
 }

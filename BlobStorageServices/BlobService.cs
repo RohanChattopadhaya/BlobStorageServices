@@ -77,13 +77,6 @@ namespace BlobStorageServices
                 containerClient = getDetailsContainer();
                 blobClient = containerClient.GetBlobClient(blobName);
 
-                //add properties
-                BlobProperties blobProperties = blobClient.GetProperties();
-                IDictionary<string, string> metaDeta = blobProperties.Metadata;
-                metaDeta.Add("Shop", "Grocery");
-                metaDeta.Add("ShopID", "GRST02");
-                blobClient.SetMetadata(metaDeta);
-
                 //Aquire lease
                 //BlobLeaseClient blobLeaseClient = blobClient.GetBlobLeaseClient();
                 //BlobLease blobLease = blobLeaseClient.Acquire(TimeSpan.FromSeconds(25));
@@ -211,6 +204,23 @@ namespace BlobStorageServices
             {
                 throw ex;
             }
+        }
+
+        public async Task<string> SetMetaData(string blobName, List<MetaData> data)
+        {
+            containerClient = getDetailsContainer();
+            blobClient = containerClient.GetBlobClient(blobName);
+
+            //add properties
+            BlobProperties blobProperties = blobClient.GetProperties();
+            IDictionary<string, string> metaDeta = blobProperties.Metadata;
+            foreach (var item in data)
+            {
+                metaDeta.Add(item.key, item.value);
+            }          
+            blobClient.SetMetadata(metaDeta);
+
+            return Constants.MetaDataCreated;
         }
 
         private Uri GetSAS(string blobName)
